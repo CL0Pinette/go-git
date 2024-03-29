@@ -406,6 +406,7 @@ const (
 	// resets the head to <commit>, just like all modes do). This leaves all
 	// your changed files "Changes to be committed", as git status would put it.
 	SoftReset
+	KeepReset
 )
 
 // ResetOptions describes how a reset operation should be performed.

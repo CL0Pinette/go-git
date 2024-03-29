@@ -293,6 +293,16 @@ func (w *Worktree) ResetSparsely(opts *ResetOptions, dirs []string) error {
 		}
 	}
 
+	head, err := w.r.Head()
+	if err != nil {
+		return err
+	}
+
+	tkeep, err := w.r.getTreeFromCommitHash(head.Hash())
+	if err != nil {
+		return err
+	}
+
 	if err := w.setHEADCommit(opts.Commit); err != nil {
 		return err
 	}
@@ -306,8 +316,15 @@ func (w *Worktree) ResetSparsely(opts *ResetOptions, dirs []string) error {
 		return err
 	}
 
-	if opts.Mode == MixedReset || opts.Mode == MergeReset || opts.Mode == HardReset {
+	if opts.Mode == MixedReset || opts.Mode == MergeReset || opts.Mode == HardReset ||
+		opts.Mode == KeepReset {
 		if err := w.resetIndex(t, dirs); err != nil {
+			return err
+		}
+	}
+
+	if opts.Mode == KeepReset {
+		if err := w.resetWorktreeKeep(t, tkeep); err != nil {
 			return err
 		}
 	}
@@ -381,6 +398,31 @@ func (w *Worktree) resetIndex(t *object.Tree, dirs []string) error {
 
 func (w *Worktree) resetWorktree(t *object.Tree) error {
 	changes, err := w.diffStagingWithWorktree(true, false)
+	if err != nil {
+		return err
+	}
+
+	idx, err := w.r.Storer.Index()
+	if err != nil {
+		return err
+	}
+	b := newIndexBuilder(idx)
+
+	for _, ch := range changes {
+		if err := w.validChange(ch); err != nil {
+			return err
+		}
+		if err := w.checkoutChange(ch, t, b); err != nil {
+			return err
+		}
+	}
+
+	b.Write(idx)
+	return w.r.Storer.SetIndex(idx)
+}
+
+func (w *Worktree) resetWorktreeKeep(t *object.Tree, tkeep *object.Tree) error {
+	changes, err := w.diffTreeWithStaging(tkeep, false)
 	if err != nil {
 		return err
 	}
